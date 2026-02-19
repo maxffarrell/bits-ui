@@ -3,6 +3,7 @@
 	import { FloatingContentState } from "../use-floating-layer.svelte.js";
 	import type { ContentImplProps } from "./index.js";
 	import { useId } from "$lib/internal/use-id.js";
+	import { resolveDirectionProp } from "$lib/bits/utilities/direction-provider/direction-provider.js";
 
 	let {
 		content,
@@ -20,7 +21,7 @@
 		sticky = "partial",
 		updatePositionStrategy = "optimized",
 		strategy = "fixed",
-		dir = "ltr",
+		dir,
 		style = {},
 		wrapperId = useId(),
 		customAnchor = null,
@@ -44,7 +45,7 @@
 			sticky: boxWith(() => sticky),
 			updatePositionStrategy: boxWith(() => updatePositionStrategy),
 			strategy: boxWith(() => strategy),
-			dir: boxWith(() => dir),
+			dir: resolveDirectionProp(() => dir),
 			style: boxWith(() => style),
 			enabled: boxWith(() => enabled),
 			wrapperId: boxWith(() => wrapperId),

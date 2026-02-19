@@ -42,6 +42,7 @@ import type { APISchema } from "$lib/types/index.js";
 import { timeRangeField } from "./time-range-field.api.js";
 import { bitsConfig } from "./bits-config.api.js";
 import { portal } from "./portal.api.js";
+import { directionProvider } from "./direction-provider.api.js";
 
 export const bits = [
 	"accordion",
@@ -139,7 +140,14 @@ export const apiSchemas: Record<Bit, APISchema[]> = {
 	tooltip,
 };
 
-export const utilities = ["bits-config", "is-using-keyboard", "merge-props", "portal", "use-id"];
+export const utilities = [
+	"bits-config",
+	"direction-provider",
+	"is-using-keyboard",
+	"merge-props",
+	"portal",
+	"use-id",
+];
 
 export const utilitiesSet = new Set(utilities);
 
@@ -147,6 +155,7 @@ export type Utility = (typeof utilities)[number];
 
 export const utilitiesSchemas: Record<Utility, APISchema[]> = {
 	"bits-config": [bitsConfig],
+	"direction-provider": [directionProvider],
 	"is-using-keyboard": [],
 	"merge-props": [],
 	portal: [portal],

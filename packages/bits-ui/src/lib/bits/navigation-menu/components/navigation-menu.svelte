@@ -4,6 +4,7 @@
 	import { NavigationMenuRootState } from "../navigation-menu.svelte.js";
 	import { createId } from "$lib/internal/create-id.js";
 	import { noop } from "$lib/internal/noop.js";
+	import { resolveDirectionProp } from "$lib/bits/utilities/direction-provider/direction-provider.js";
 
 	const uid = $props.id();
 
@@ -16,7 +17,7 @@
 		onValueChange = noop,
 		delayDuration = 200,
 		skipDelayDuration = 300,
-		dir = "ltr",
+		dir,
 		orientation = "horizontal",
 		...restProps
 	}: NavigationMenuRootProps = $props();
@@ -32,7 +33,7 @@
 		),
 		delayDuration: boxWith(() => delayDuration),
 		skipDelayDuration: boxWith(() => skipDelayDuration),
-		dir: boxWith(() => dir),
+		dir: resolveDirectionProp(() => dir),
 		orientation: boxWith(() => orientation),
 		ref: boxWith(
 			() => ref,

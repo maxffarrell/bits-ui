@@ -4,6 +4,7 @@
 	import { MenubarRootState } from "../menubar.svelte.js";
 	import { createId } from "$lib/internal/create-id.js";
 	import { noop } from "$lib/internal/noop.js";
+	import { resolveDirectionProp } from "$lib/bits/utilities/direction-provider/direction-provider.js";
 
 	const uid = $props.id();
 
@@ -13,7 +14,7 @@
 		child,
 		ref = $bindable(null),
 		value = $bindable(""),
-		dir = "ltr",
+		dir,
 		loop = true,
 		onValueChange = noop,
 		...restProps
@@ -28,7 +29,7 @@
 				onValueChange?.(v);
 			}
 		),
-		dir: boxWith(() => dir),
+		dir: resolveDirectionProp(() => dir),
 		loop: boxWith(() => loop),
 		ref: boxWith(
 			() => ref,

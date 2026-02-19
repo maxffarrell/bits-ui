@@ -15,6 +15,7 @@ export {
 	DatePicker,
 	DateRangeField,
 	DateRangePicker,
+	DirectionProvider,
 	Dialog,
 	DropdownMenu,
 	Label,

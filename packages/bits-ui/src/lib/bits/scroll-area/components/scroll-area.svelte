@@ -3,6 +3,7 @@
 	import type { ScrollAreaRootProps } from "../types.js";
 	import { ScrollAreaRootState } from "../scroll-area.svelte.js";
 	import { createId } from "$lib/internal/create-id.js";
+	import { resolveDirectionProp } from "$lib/bits/utilities/direction-provider/direction-provider.js";
 
 	const uid = $props.id();
 
@@ -10,7 +11,7 @@
 		ref = $bindable(null),
 		id = createId(uid),
 		type = "hover",
-		dir = "ltr",
+		dir,
 		scrollHideDelay = 600,
 		children,
 		child,
@@ -19,7 +20,7 @@
 
 	const rootState = ScrollAreaRootState.create({
 		type: boxWith(() => type),
-		dir: boxWith(() => dir),
+		dir: resolveDirectionProp(() => dir),
 		scrollHideDelay: boxWith(() => scrollHideDelay),
 		id: boxWith(() => id),
 		ref: boxWith(

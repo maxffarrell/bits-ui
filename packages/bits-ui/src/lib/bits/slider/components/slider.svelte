@@ -5,6 +5,7 @@
 	import { createId } from "$lib/internal/create-id.js";
 	import { noop } from "$lib/internal/noop.js";
 	import { watch } from "runed";
+	import { resolveDirectionProp } from "$lib/bits/utilities/direction-provider/direction-provider.js";
 
 	const uid = $props.id();
 
@@ -21,7 +22,7 @@
 		min: minProp,
 		max: maxProp,
 		step = 1,
-		dir = "ltr",
+		dir,
 		autoSort = true,
 		orientation = "horizontal",
 		thumbPositioning = "contain",
@@ -79,7 +80,7 @@
 		min: boxWith(() => min),
 		max: boxWith(() => max),
 		step: boxWith(() => step),
-		dir: boxWith(() => dir),
+		dir: resolveDirectionProp(() => dir),
 		autoSort: boxWith(() => autoSort),
 		orientation: boxWith(() => orientation),
 		thumbPositioning: boxWith(() => thumbPositioning),

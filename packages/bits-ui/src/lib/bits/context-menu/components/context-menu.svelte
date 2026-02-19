@@ -4,10 +4,11 @@
 	import FloatingLayer from "$lib/bits/utilities/floating-layer/components/floating-layer.svelte";
 	import { noop } from "$lib/internal/noop.js";
 	import { MenuMenuState, MenuRootState } from "$lib/bits/menu/menu.svelte.js";
+	import { resolveDirectionProp } from "$lib/bits/utilities/direction-provider/direction-provider.js";
 
 	let {
 		open = $bindable(false),
-		dir = "ltr",
+		dir,
 		onOpenChange = noop,
 		onOpenChangeComplete = noop,
 		children,
@@ -15,7 +16,7 @@
 
 	const root = MenuRootState.create({
 		variant: boxWith(() => "context-menu"),
-		dir: boxWith(() => dir),
+		dir: resolveDirectionProp(() => dir),
 		onClose: () => {
 			open = false;
 			onOpenChange?.(false);

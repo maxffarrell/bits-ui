@@ -4,10 +4,11 @@
 	import { MenuMenuState, MenuRootState } from "../menu.svelte.js";
 	import { noop } from "$lib/internal/noop.js";
 	import FloatingLayer from "$lib/bits/utilities/floating-layer/components/floating-layer.svelte";
+	import { resolveDirectionProp } from "$lib/bits/utilities/direction-provider/direction-provider.js";
 
 	let {
 		open = $bindable(false),
-		dir = "ltr",
+		dir,
 		onOpenChange = noop,
 		onOpenChangeComplete = noop,
 		_internal_variant: variant = "dropdown-menu",
@@ -18,7 +19,7 @@
 
 	const root = MenuRootState.create({
 		variant: boxWith(() => variant),
-		dir: boxWith(() => dir),
+		dir: resolveDirectionProp(() => dir),
 		onClose: () => {
 			open = false;
 			onOpenChange(false);
