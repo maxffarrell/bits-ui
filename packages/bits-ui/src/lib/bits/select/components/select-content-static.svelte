@@ -6,6 +6,7 @@
 	import { createId } from "$lib/internal/create-id.js";
 	import { noop } from "$lib/internal/noop.js";
 	import PopperLayerForceMount from "$lib/bits/utilities/popper-layer/popper-layer-force-mount.svelte";
+	import SelectItemAlignedContent from "./select-item-aligned-content.svelte";
 
 	const uid = $props.id();
 
@@ -19,6 +20,7 @@
 		child,
 		preventScroll = false,
 		style,
+		position = "popper",
 		...restProps
 	}: SelectContentStaticProps = $props();
 
@@ -30,12 +32,43 @@
 		),
 		onInteractOutside: boxWith(() => onInteractOutside),
 		onEscapeKeydown: boxWith(() => onEscapeKeydown),
+		position: boxWith(() => position),
 	});
 
 	const mergedProps = $derived(mergeProps(restProps, contentState.props));
 </script>
 
-{#if forceMount}
+{#if contentState.useItemAligned}
+	<SelectItemAlignedContent
+		{id}
+		ref={contentState.opts.ref}
+		enabled={contentState.root.opts.open.current}
+		shouldRender={contentState.shouldRender}
+		{preventScroll}
+		onEscapeKeydown={contentState.onEscapeKeydown}
+		onInteractOutside={contentState.onInteractOutside}
+		onOpenAutoFocus={contentState.onOpenAutoFocus}
+		onCloseAutoFocus={contentState.onCloseAutoFocus}
+		trapFocus={false}
+		loop={false}
+	>
+		{#snippet content({ props: layerProps })}
+			{@const contentProps = mergeProps(restProps, layerProps, contentState.props, { style })}
+			<div
+				ref={(node) => contentState.setContentWrapper(node)}
+				style={{ position: "fixed", display: "flex", flexDirection: "column" }}
+			>
+				{#if child}
+					{@render child({ props: contentProps, ...contentState.snippetProps })}
+				{:else}
+					<div {...contentProps}>
+						{@render children?.()}
+					</div>
+				{/if}
+			</div>
+		{/snippet}
+	</SelectItemAlignedContent>
+{:else if forceMount}
 	<PopperLayerForceMount
 		{...mergedProps}
 		{...contentState.popperProps}
