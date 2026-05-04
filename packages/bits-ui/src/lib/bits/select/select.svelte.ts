@@ -1180,8 +1180,8 @@ export class SelectContentState {
 			Math.min(left, Math.max(CONTENT_MARGIN, rightEdge - contentWidth))
 		);
 
-		contentWrapper.style.minWidth = minContentWidth + "px";
-		contentWrapper.style.left = clampedLeft + "px";
+		contentWrapper.style.width = triggerRect.width + "px";
+		contentWrapper.style.left = triggerRect.left + "px";
 
 		// -----------------------------------------------------------------------------------------
 		// Vertical positioning
