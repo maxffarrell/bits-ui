@@ -5,6 +5,7 @@ import {
 	onDestroyEffect,
 	attachRef,
 	DOMContext,
+	executeCallbacks,
 	type ReadableBoxedValues,
 	type WritableBoxedValues,
 	type Box,
@@ -1073,7 +1074,18 @@ export class SelectContentState {
 			const win = this.domContext.getWindow();
 			if (!win) return;
 			const close = () => this.root.handleClose();
-			return on(win, "resize", close);
+			const reposition = (e: Event) => {
+				// Ignore scrolls on the internal viewport element (handled by expand-on-scroll).
+				// With capture:true we receive all scroll events, including viewport.scrollTop
+				// mutations inside #position(), which would cause an infinite reposition loop.
+				if (e.target === this.root.viewportNode) return;
+				if (!this.isPositioned) return;
+				this.#position();
+			};
+			return executeCallbacks(
+				on(win, "resize", close),
+				on(win, "scroll", reposition, { capture: true, passive: true })
+			);
 		});
 
 		this.onpointermove = this.onpointermove.bind(this);
