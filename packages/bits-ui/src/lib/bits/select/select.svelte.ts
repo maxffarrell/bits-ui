@@ -1014,6 +1014,8 @@ export class SelectContentState {
 	// Matches Radix shouldExpandOnScrollRef — activated after initial positioning so that
 	// user-initiated scrolling can expand the content wrapper height.
 	shouldExpandOnScroll = false;
+	// True when #position() used the if-branch (content grows upward from below trigger).
+	expandsUpward = false;
 
 	constructor(opts: SelectContentStateOpts, root: SelectRoot) {
 		this.opts = opts;
@@ -1069,21 +1071,19 @@ export class SelectContentState {
 		);
 
 		// Radix closes the select on resize in item-aligned mode.
+		// On page scroll, reposition without clamping so the content scrolls off-screen
+		// naturally when the trigger scrolls out of view.
 		$effect(() => {
 			if (!this.useItemAligned) return;
 			const win = this.domContext.getWindow();
 			if (!win) return;
-			const close = () => this.root.handleClose();
 			const reposition = (e: Event) => {
-				// Ignore scrolls on the internal viewport element (handled by expand-on-scroll).
-				// With capture:true we receive all scroll events, including viewport.scrollTop
-				// mutations inside #position(), which would cause an infinite reposition loop.
 				if (e.target === this.root.viewportNode) return;
 				if (!this.isPositioned) return;
-				this.#position();
+				this.#repositionOnScroll();
 			};
 			return executeCallbacks(
-				on(win, "resize", close),
+				on(win, "resize", () => this.root.handleClose()),
 				on(win, "scroll", reposition, { capture: true, passive: true })
 			);
 		});
@@ -1128,8 +1128,12 @@ export class SelectContentState {
 				const nextHeight = prevHeight + scrolledBy;
 				const clampedNextHeight = Math.min(availableHeight, nextHeight);
 				const heightDiff = nextHeight - clampedNextHeight;
+				const actualIncrease = clampedNextHeight - prevHeight;
 				contentWrapper.style.height = clampedNextHeight + "px";
-				if (contentWrapper.style.bottom === "0px") {
+				if (this.expandsUpward) {
+					// Grow upward: shift top up by the amount height grew.
+					contentWrapper.style.top =
+						(parseFloat(contentWrapper.style.top) - actualIncrease) + "px";
 					viewport.scrollTop = heightDiff > 0 ? heightDiff : 0;
 					contentWrapper.style.justifyContent = "flex-end";
 				}
@@ -1217,10 +1221,9 @@ export class SelectContentState {
 		const willAlignWithoutTopOverflow = viewportTopToItemMiddle <= topEdgeToTriggerMiddle;
 
 		if (willAlignWithoutTopOverflow) {
+			this.expandsUpward = true;
 			const isLastItem =
 				allItems.length > 0 && selectedItem === allItems[allItems.length - 1];
-			contentWrapper.style.bottom = "0px";
-			contentWrapper.style.top = "";
 			const viewportOffsetBottom =
 				content.clientHeight - viewport.offsetTop - viewport.offsetHeight;
 			const clampedTriggerMiddleToBottomEdge = Math.max(
@@ -1232,10 +1235,13 @@ export class SelectContentState {
 			);
 			const height = viewportTopToItemMiddle + clampedTriggerMiddleToBottomEdge;
 			contentWrapper.style.height = height + "px";
-		} else {
-			const isFirstItem = allItems.length > 0 && selectedItem === allItems[0];
-			contentWrapper.style.top = "0px";
+			// Compute top explicitly so content can scroll off-screen with the trigger.
+			// Equivalent to bottom:0px + CONTENT_MARGIN gap but expressed as top.
+			contentWrapper.style.top = (win.innerHeight - CONTENT_MARGIN - height) + "px";
 			contentWrapper.style.bottom = "";
+		} else {
+			this.expandsUpward = false;
+			const isFirstItem = allItems.length > 0 && selectedItem === allItems[0];
 			const clampedTopEdgeToTriggerMiddle = Math.max(
 				topEdgeToTriggerMiddle,
 				contentBorderTopWidth +
@@ -1245,10 +1251,12 @@ export class SelectContentState {
 			);
 			const height = clampedTopEdgeToTriggerMiddle + itemMiddleToContentBottom;
 			contentWrapper.style.height = height + "px";
+			contentWrapper.style.top = CONTENT_MARGIN + "px";
+			contentWrapper.style.bottom = "";
 			viewport.scrollTop = viewportTopToItemMiddle - topEdgeToTriggerMiddle;
 		}
 
-		contentWrapper.style.margin = `${CONTENT_MARGIN}px 0`;
+		contentWrapper.style.margin = "";
 		contentWrapper.style.minHeight = minContentHeight + "px";
 		contentWrapper.style.maxHeight = availableHeight + "px";
 		// Copy z-index from content so stacking context is preserved.
@@ -1263,6 +1271,26 @@ export class SelectContentState {
 		requestAnimationFrame(() => {
 			this.shouldExpandOnScroll = true;
 		});
+	}
+
+	/**
+	 * Lightweight reposition used on page scroll. Computes an unclamped top so the
+	 * content scrolls off-screen when the trigger scrolls out of view, matching the
+	 * natural behavior of a popper-positioned dropdown.
+	 */
+	#repositionOnScroll() {
+		const contentWrapper = this.root.contentWrapperNode;
+		const trigger = this.root.triggerNode;
+		const viewport = this.root.viewportNode;
+		const selectedItem = this.root.selectedItemNode;
+		if (!contentWrapper || !trigger || !viewport || !selectedItem) return;
+
+		const triggerRect = trigger.getBoundingClientRect();
+		const viewportTopToItemMiddle =
+			viewport.offsetTop + selectedItem.offsetTop + selectedItem.offsetHeight / 2;
+		const contentTop = triggerRect.top + triggerRect.height / 2 - viewportTopToItemMiddle;
+		contentWrapper.style.top = contentTop + "px";
+		contentWrapper.style.bottom = "";
 	}
 
 	onpointermove(_: BitsPointerEvent) {
