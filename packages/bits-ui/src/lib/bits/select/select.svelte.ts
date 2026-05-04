@@ -103,6 +103,7 @@ abstract class SelectBaseRootState {
 	contentPresence: PresenceManager;
 	viewportNode = $state<HTMLElement | null>(null);
 	triggerNode = $state<HTMLElement | null>(null);
+	triggerPointerDownPos = $state<{ x: number; y: number } | null>(null);
 	valueNode = $state<HTMLElement | null>(null);
 	valueId = $state("");
 	highlightedNode = $state<HTMLElement | null>(null);
@@ -784,7 +785,11 @@ export class SelectTriggerState {
 		this.#domTypeahead.resetTypeahead();
 	}
 
-	#handlePointerOpen(_: PointerEvent) {
+	#handlePointerOpen(e: PointerEvent) {
+		this.root.triggerPointerDownPos = {
+			x: Math.round(e.pageX),
+			y: Math.round(e.pageY),
+		};
 		this.#handleOpen();
 	}
 
@@ -1086,6 +1091,44 @@ export class SelectContentState {
 				on(win, "resize", () => this.root.handleClose()),
 				on(win, "scroll", reposition, { capture: true, passive: true })
 			);
+		});
+
+		// Mirrors Radix's pointer-movement threshold guard. When the menu opens via a
+		// mouse pointerdown on the trigger, attach document-level listeners that track
+		// how far the pointer has moved. On the first pointerup, if the delta is ≤10px
+		// in both axes, preventDefault() blocks item selection so that a quick click-to-
+		// open doesn't immediately re-select the highlighted item.
+		$effect(() => {
+			const content = this.root.contentNode;
+			const triggerPointerDownPos = this.root.triggerPointerDownPos;
+			if (!content || !triggerPointerDownPos) return;
+
+			const doc = this.domContext.getDocument();
+			let pointerMoveDelta = { x: 0, y: 0 };
+
+			const handlePointerMove = (e: PointerEvent) => {
+				pointerMoveDelta = {
+					x: Math.abs(Math.round(e.pageX) - triggerPointerDownPos.x),
+					y: Math.abs(Math.round(e.pageY) - triggerPointerDownPos.y),
+				};
+			};
+
+			const handlePointerUp = (e: PointerEvent) => {
+				if (pointerMoveDelta.x <= 10 && pointerMoveDelta.y <= 10) {
+					e.preventDefault();
+				} else if (!content.contains(e.target as HTMLElement)) {
+					this.root.handleClose();
+				}
+				this.root.triggerPointerDownPos = null;
+			};
+
+			doc.addEventListener("pointermove", handlePointerMove);
+			doc.addEventListener("pointerup", handlePointerUp, { capture: true, once: true });
+
+			return () => {
+				doc.removeEventListener("pointermove", handlePointerMove);
+				doc.removeEventListener("pointerup", handlePointerUp, { capture: true });
+			};
 		});
 
 		this.onpointermove = this.onpointermove.bind(this);
@@ -1453,9 +1496,6 @@ export class SelectItemState {
 		this.onpointermove = this.onpointermove.bind(this);
 	}
 
-	#isPointerDown = false;
-	#hasPointerMoved = false;
-
 	handleSelect() {
 		if (this.opts.disabled.current) return;
 		const isCurrentSelectedValue = this.opts.value.current === this.root.opts.value.current;
@@ -1483,8 +1523,6 @@ export class SelectItemState {
 	onpointerdown(e: BitsPointerEvent) {
 		// prevent focus from leaving the input/select trigger
 		e.preventDefault();
-		this.#isPointerDown = true;
-		this.#hasPointerMoved = false;
 	}
 
 	/**
@@ -1494,9 +1532,6 @@ export class SelectItemState {
 	 */
 	onpointerup(e: BitsPointerEvent) {
 		if (e.defaultPrevented || !this.opts.ref.current) return;
-		if (!this.#isPointerDown && !this.#hasPointerMoved) return;
-		this.#isPointerDown = false;
-		this.#hasPointerMoved = false;
 		/**
 		 * For one reason or another, when it's a touch pointer and _not_ on IOS,
 		 * we need to listen for the immediate click event to handle the selection,
@@ -1534,7 +1569,6 @@ export class SelectItemState {
 		 * touch devices only.
 		 */
 		if (e.pointerType === "touch") return;
-		this.#hasPointerMoved = true;
 		if (this.root.highlightedNode !== this.opts.ref.current) {
 			this.root.setHighlightedNode(this.opts.ref.current);
 		}
