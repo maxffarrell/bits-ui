@@ -1312,7 +1312,7 @@ export class SelectContentState {
 		const triggerRect = trigger.getBoundingClientRect();
 		const viewportTopToItemMiddle =
 			viewport.offsetTop + selectedItem.offsetTop + selectedItem.offsetHeight / 2;
-		const contentTop = triggerRect.top + triggerRect.height / 2 - viewportTopToItemMiddle;
+		const contentTop = triggerRect.top + triggerRect.height / 2 - viewportTopToItemMiddle + viewport.scrollTop;
 		contentWrapper.style.top = contentTop + "px";
 		contentWrapper.style.bottom = "";
 	}
