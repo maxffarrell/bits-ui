@@ -1426,6 +1426,7 @@ export class SelectItemState {
 	}
 
 	#isPointerDown = false;
+	#hasPointerMoved = false;
 
 	handleSelect() {
 		if (this.opts.disabled.current) return;
@@ -1455,6 +1456,7 @@ export class SelectItemState {
 		// prevent focus from leaving the input/select trigger
 		e.preventDefault();
 		this.#isPointerDown = true;
+		this.#hasPointerMoved = false;
 	}
 
 	/**
@@ -1464,8 +1466,9 @@ export class SelectItemState {
 	 */
 	onpointerup(e: BitsPointerEvent) {
 		if (e.defaultPrevented || !this.opts.ref.current) return;
-		if (!this.#isPointerDown) return;
+		if (!this.#isPointerDown && !this.#hasPointerMoved) return;
 		this.#isPointerDown = false;
+		this.#hasPointerMoved = false;
 		/**
 		 * For one reason or another, when it's a touch pointer and _not_ on IOS,
 		 * we need to listen for the immediate click event to handle the selection,
@@ -1503,6 +1506,7 @@ export class SelectItemState {
 		 * touch devices only.
 		 */
 		if (e.pointerType === "touch") return;
+		this.#hasPointerMoved = true;
 		if (this.root.highlightedNode !== this.opts.ref.current) {
 			this.root.setHighlightedNode(this.opts.ref.current);
 		}
