@@ -120,6 +120,8 @@ abstract class SelectBaseRootState {
 	isUsingKeyboard = false;
 	isCombobox = false;
 	domContext = new DOMContext(() => null);
+	selectedItemNode = $state<HTMLElement | null>(null);
+	contentWrapperNode = $state<HTMLElement | null>(null);
 
 	constructor(opts: SelectBaseRootStateOpts) {
 		this.opts = opts;
@@ -158,6 +160,12 @@ abstract class SelectBaseRootState {
 		return Array.from(
 			node.querySelectorAll<HTMLElement>(`[${this.getBitsAttr("item")}]:not([data-disabled])`)
 		);
+	}
+
+	getAllItemNodes(): HTMLElement[] {
+		const node = this.contentNode;
+		if (!node) return [];
+		return Array.from(node.querySelectorAll<HTMLElement>(`[${this.getBitsAttr("item")}]`));
 	}
 
 	setHighlightedToFirstCandidate(initial = false) {
@@ -985,6 +993,7 @@ interface SelectContentStateOpts
 		ReadableBoxedValues<{
 			onInteractOutside: (e: PointerEvent) => void;
 			onEscapeKeydown: (e: KeyboardEvent) => void;
+			position: "popper" | "item-aligned";
 		}> {}
 
 export class SelectContentState {
@@ -996,6 +1005,13 @@ export class SelectContentState {
 	readonly attachment: RefAttachment;
 	isPositioned = $state(false);
 	domContext: DOMContext;
+	readonly useItemAligned = $derived.by(() => this.opts.position.current === "item-aligned");
+	// Matches Radix shouldRepositionRef — resets to true on each open, flipped false after
+	// the first scroll-button-triggered reposition so we only reposition once.
+	shouldReposition = true;
+	// Matches Radix shouldExpandOnScrollRef — activated after initial positioning so that
+	// user-initiated scrolling can expand the content wrapper height.
+	shouldExpandOnScroll = false;
 
 	constructor(opts: SelectContentStateOpts, root: SelectRoot) {
 		this.opts = opts;
@@ -1009,6 +1025,7 @@ export class SelectContentState {
 
 		onDestroyEffect(() => {
 			this.root.contentNode = null;
+			this.root.contentWrapperNode = null;
 			this.root.contentIsPositioned = false;
 			this.isPositioned = false;
 		});
@@ -1016,7 +1033,11 @@ export class SelectContentState {
 		watch(
 			() => this.root.opts.open.current,
 			() => {
-				if (this.root.opts.open.current) return;
+				if (this.root.opts.open.current) {
+					this.shouldReposition = true;
+					this.shouldExpandOnScroll = false;
+					return;
+				}
 				this.root.contentIsPositioned = false;
 				this.isPositioned = false;
 			}
@@ -1027,7 +1048,205 @@ export class SelectContentState {
 			this.root.scrollHighlightedNodeIntoView(this.root.highlightedNode);
 		});
 
+		// Re-run item-aligned positioning whenever layout-affecting state changes.
+		watch(
+			[
+				() => this.useItemAligned,
+				() => this.root.opts.open.current,
+				() => this.root.contentWrapperNode,
+				() => this.root.contentNode,
+				() => this.root.viewportNode,
+				() => this.root.triggerNode,
+				() => this.root.selectedItemNode,
+			],
+			() => {
+				if (!this.useItemAligned || !this.root.opts.open.current) return;
+				this.#position();
+			}
+		);
+
+		// Radix closes the select on resize in item-aligned mode.
+		$effect(() => {
+			if (!this.useItemAligned) return;
+			const win = this.domContext.getWindow();
+			if (!win) return;
+			const close = () => this.root.handleClose();
+			return on(win, "resize", close);
+		});
+
 		this.onpointermove = this.onpointermove.bind(this);
+	}
+
+	setContentWrapper(node: HTMLElement | null) {
+		this.root.contentWrapperNode = node;
+	}
+
+	/**
+	 * Called when a scroll button mounts. Mirrors Radix's `handleScrollButtonChange`:
+	 * repositions once if `shouldReposition` is still true (scroll up button appearance
+	 * shifts the viewport down, invalidating the initial alignment).
+	 */
+	handleScrollButtonChange() {
+		if (this.shouldReposition) {
+			this.#position();
+			this.shouldReposition = false;
+		}
+	}
+
+	/**
+	 * Called by SelectViewportState's scroll handler. Expands the content wrapper height
+	 * as the user scrolls, up to the available viewport height. Mirrors Radix's
+	 * `shouldExpandOnScrollRef` logic in the viewport's onScroll handler.
+	 */
+	handleExpandOnScroll(viewport: HTMLElement, prevScrollTop: number): number {
+		const contentWrapper = this.root.contentWrapperNode;
+		if (!this.shouldExpandOnScroll || !contentWrapper) return viewport.scrollTop;
+
+		const scrolledBy = Math.abs(prevScrollTop - viewport.scrollTop);
+		if (scrolledBy > 0) {
+			const win = this.domContext.getWindow();
+			if (!win) return viewport.scrollTop;
+			const availableHeight = win.innerHeight - CONTENT_MARGIN * 2;
+			const cssMinHeight = parseFloat(contentWrapper.style.minHeight);
+			const cssHeight = parseFloat(contentWrapper.style.height);
+			const prevHeight = Math.max(cssMinHeight, cssHeight);
+			if (prevHeight < availableHeight) {
+				const nextHeight = prevHeight + scrolledBy;
+				const clampedNextHeight = Math.min(availableHeight, nextHeight);
+				const heightDiff = nextHeight - clampedNextHeight;
+				contentWrapper.style.height = clampedNextHeight + "px";
+				if (contentWrapper.style.bottom === "0px") {
+					viewport.scrollTop = heightDiff > 0 ? heightDiff : 0;
+					contentWrapper.style.justifyContent = "flex-end";
+				}
+			}
+		}
+		return viewport.scrollTop;
+	}
+
+	/**
+	 * Positions the content wrapper so the selected item's center aligns with the
+	 * trigger's center, exactly matching the Radix UI SelectItemAlignedPosition algorithm.
+	 */
+	#position() {
+		const contentWrapper = this.root.contentWrapperNode;
+		const content = this.root.contentNode;
+		const viewport = this.root.viewportNode;
+		const trigger = this.root.triggerNode;
+		const valueNode = this.root.valueNode;
+		const selectedItem = this.root.selectedItemNode;
+
+		if (!contentWrapper || !content || !viewport || !trigger || !valueNode || !selectedItem) {
+			return;
+		}
+
+		const win = this.domContext.getWindow();
+		if (!win) return;
+
+		// In Radix, `selectedItemText` is a separate <ItemText> sub-element. Since bits-ui
+		// has no separate ItemText component, we use the item element itself as the proxy.
+		const selectedItemText = selectedItem;
+
+		const triggerRect = trigger.getBoundingClientRect();
+		const contentRect = content.getBoundingClientRect();
+		const valueNodeRect = valueNode.getBoundingClientRect();
+		const itemTextRect = selectedItemText.getBoundingClientRect();
+
+		// -----------------------------------------------------------------------------------------
+		// Horizontal positioning — align item-text left edge with value-node left edge.
+		// -----------------------------------------------------------------------------------------
+		const itemTextOffset = itemTextRect.left - contentRect.left;
+		const left = valueNodeRect.left - itemTextOffset;
+		const leftDelta = triggerRect.left - left;
+		const minContentWidth = triggerRect.width + leftDelta;
+		const contentWidth = Math.max(minContentWidth, contentRect.width);
+		const rightEdge = win.innerWidth - CONTENT_MARGIN;
+		const clampedLeft = Math.max(
+			CONTENT_MARGIN,
+			Math.min(left, Math.max(CONTENT_MARGIN, rightEdge - contentWidth))
+		);
+
+		contentWrapper.style.minWidth = minContentWidth + "px";
+		contentWrapper.style.left = clampedLeft + "px";
+
+		// -----------------------------------------------------------------------------------------
+		// Vertical positioning
+		// -----------------------------------------------------------------------------------------
+		const allItems = this.root.getAllItemNodes();
+		const availableHeight = win.innerHeight - CONTENT_MARGIN * 2;
+		const itemsHeight = viewport.scrollHeight;
+
+		const contentStyles = win.getComputedStyle(content);
+		const contentBorderTopWidth = parseInt(contentStyles.borderTopWidth, 10);
+		const contentPaddingTop = parseInt(contentStyles.paddingTop, 10);
+		const contentBorderBottomWidth = parseInt(contentStyles.borderBottomWidth, 10);
+		const contentPaddingBottom = parseInt(contentStyles.paddingBottom, 10);
+		// prettier-ignore
+		const fullContentHeight = contentBorderTopWidth + contentPaddingTop + itemsHeight + contentPaddingBottom + contentBorderBottomWidth;
+		const minContentHeight = Math.min(selectedItem.offsetHeight * 5, fullContentHeight);
+
+		const viewportStyles = win.getComputedStyle(viewport);
+		const viewportPaddingTop = parseInt(viewportStyles.paddingTop, 10);
+		const viewportPaddingBottom = parseInt(viewportStyles.paddingBottom, 10);
+
+		const topEdgeToTriggerMiddle = triggerRect.top + triggerRect.height / 2 - CONTENT_MARGIN;
+		const triggerMiddleToBottomEdge = availableHeight - topEdgeToTriggerMiddle;
+
+		const selectedItemHalfHeight = selectedItem.offsetHeight / 2;
+		const itemOffsetMiddle = selectedItem.offsetTop + selectedItemHalfHeight;
+		const contentTopToItemMiddle = contentBorderTopWidth + contentPaddingTop + itemOffsetMiddle;
+		const itemMiddleToContentBottom = fullContentHeight - contentTopToItemMiddle;
+
+		const willAlignWithoutTopOverflow = contentTopToItemMiddle <= topEdgeToTriggerMiddle;
+
+		if (willAlignWithoutTopOverflow) {
+			const isLastItem =
+				allItems.length > 0 && selectedItem === allItems[allItems.length - 1];
+			contentWrapper.style.bottom = "0px";
+			contentWrapper.style.top = "";
+			const viewportOffsetBottom =
+				content.clientHeight - viewport.offsetTop - viewport.offsetHeight;
+			const clampedTriggerMiddleToBottomEdge = Math.max(
+				triggerMiddleToBottomEdge,
+				selectedItemHalfHeight +
+					(isLastItem ? viewportPaddingBottom : 0) +
+					viewportOffsetBottom +
+					contentBorderBottomWidth
+			);
+			const height = contentTopToItemMiddle + clampedTriggerMiddleToBottomEdge;
+			contentWrapper.style.height = height + "px";
+		} else {
+			const isFirstItem = allItems.length > 0 && selectedItem === allItems[0];
+			contentWrapper.style.top = "0px";
+			contentWrapper.style.bottom = "";
+			const clampedTopEdgeToTriggerMiddle = Math.max(
+				topEdgeToTriggerMiddle,
+				contentBorderTopWidth +
+					viewport.offsetTop +
+					(isFirstItem ? viewportPaddingTop : 0) +
+					selectedItemHalfHeight
+			);
+			const height = clampedTopEdgeToTriggerMiddle + itemMiddleToContentBottom;
+			contentWrapper.style.height = height + "px";
+			viewport.scrollTop =
+				contentTopToItemMiddle - topEdgeToTriggerMiddle + viewport.offsetTop;
+		}
+
+		contentWrapper.style.margin = `${CONTENT_MARGIN}px 0`;
+		contentWrapper.style.minHeight = minContentHeight + "px";
+		contentWrapper.style.maxHeight = availableHeight + "px";
+		// Copy z-index from content so stacking context is preserved.
+		contentWrapper.style.zIndex = win.getComputedStyle(content).zIndex;
+
+		if (!this.isPositioned) {
+			this.isPositioned = true;
+			this.root.contentIsPositioned = true;
+		}
+
+		// Enable expand-on-scroll after the initial positioning settles.
+		requestAnimationFrame(() => {
+			this.shouldExpandOnScroll = true;
+		});
 	}
 
 	onpointermove(_: BitsPointerEvent) {
@@ -1075,16 +1294,28 @@ export class SelectContentState {
 				role: "listbox",
 				"aria-multiselectable": this.root.isMulti ? "true" : undefined,
 				"data-state": getDataOpenClosed(this.root.opts.open.current),
+				"data-side": this.useItemAligned ? "none" : undefined,
 				...getDataTransitionAttrs(this.root.contentPresence.transitionStatus),
 				[this.root.getBitsAttr("content")]: "",
-				style: {
-					display: "flex",
-					flexDirection: "column",
-					outline: "none",
-					boxSizing: "border-box",
-					pointerEvents: "auto",
-					...this.#styles,
-				},
+				style: this.useItemAligned
+					? {
+							// In item-aligned mode the wrapper div carries all positioning;
+							// the content div just needs to fill it with correct box model.
+							boxSizing: "border-box",
+							maxHeight: "100%",
+							display: "flex",
+							flexDirection: "column",
+							outline: "none",
+							pointerEvents: "auto",
+						}
+					: {
+							display: "flex",
+							flexDirection: "column",
+							outline: "none",
+							boxSizing: "border-box",
+							pointerEvents: "auto",
+							...this.#styles,
+						},
 				onpointermove: this.onpointermove,
 				...this.attachment,
 			}) as const
@@ -1152,6 +1383,22 @@ export class SelectItemState {
 				this.root.setInitialHighlightedNode();
 			}
 		);
+
+		// Publish this item's node to the root while it is the selected item so the
+		// item-aligned positioner can measure it.
+		watch([() => this.isSelected, () => this.mounted], () => {
+			if (this.isSelected && this.mounted) {
+				this.root.selectedItemNode = this.opts.ref.current;
+			} else if (this.root.selectedItemNode === this.opts.ref.current) {
+				this.root.selectedItemNode = null;
+			}
+		});
+
+		onDestroyEffect(() => {
+			if (this.root.selectedItemNode === this.opts.ref.current) {
+				this.root.selectedItemNode = null;
+			}
+		});
 
 		this.onpointerdown = this.onpointerdown.bind(this);
 		this.onpointerup = this.onpointerup.bind(this);
@@ -1377,6 +1624,16 @@ export class SelectViewportState {
 		this.attachment = attachRef(opts.ref, (v) => {
 			this.root.viewportNode = v;
 		});
+
+		// Expand the content wrapper as the user scrolls in item-aligned mode.
+		watch([() => this.root.viewportNode, () => this.content.useItemAligned], () => {
+			const viewport = this.root.viewportNode;
+			if (!viewport || !this.content.useItemAligned) return;
+			let prevScrollTop = viewport.scrollTop;
+			return on(viewport, "scroll", () => {
+				prevScrollTop = this.content.handleExpandOnScroll(viewport, prevScrollTop);
+			});
+		});
 	}
 
 	readonly props = $derived.by(
@@ -1545,6 +1802,11 @@ export class SelectScrollDownButtonState {
 					if (!activeItem) return;
 					this.root.scrollHighlightedNodeIntoView(activeItem);
 				});
+				// Reposition once when scroll button appears in item-aligned mode — the button
+				// shifts the viewport down, invalidating the initial alignment.
+				if (this.content.useItemAligned) {
+					this.content.handleScrollButtonChange();
+				}
 			}
 		);
 	}
@@ -1602,6 +1864,16 @@ export class SelectScrollUpButtonState {
 			this.handleScroll(true);
 			return on(this.root.viewportNode, "scroll", () => this.handleScroll());
 		});
+
+		watch(
+			() => this.scrollButtonState.mounted,
+			() => {
+				// Reposition once when scroll up button appears in item-aligned mode.
+				if (this.scrollButtonState.mounted && this.content.useItemAligned) {
+					this.content.handleScrollButtonChange();
+				}
+			}
+		);
 	}
 
 	/**
