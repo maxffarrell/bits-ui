@@ -1238,9 +1238,13 @@ export class SelectContentState {
 		const itemOffsetMiddle = selectedItem.offsetTop + selectedItemHalfHeight;
 		const contentTopToItemMiddle = contentBorderTopWidth + contentPaddingTop + itemOffsetMiddle;
 		const itemMiddleToContentBottom = fullContentHeight - contentTopToItemMiddle;
-		// selectedItem.offsetTop is relative to the viewport (its offsetParent), so the
-		// distance from the wrapper top to the item middle uses viewport.offsetTop directly.
-		const viewportTopToItemMiddle = viewport.offsetTop + itemOffsetMiddle;
+		// Use getBoundingClientRect for a pixel-accurate measurement that includes the content
+		// element's border regardless of its CSS position value (relative vs. static changes
+		// which element is the offsetParent and whether viewport.offsetTop includes the border).
+		const contentWrapperRect = contentWrapper.getBoundingClientRect();
+		const selectedItemRect = selectedItem.getBoundingClientRect();
+		const viewportTopToItemMiddle =
+			selectedItemRect.top - contentWrapperRect.top + viewport.scrollTop + selectedItemHalfHeight;
 
 		const willAlignWithoutTopOverflow = viewportTopToItemMiddle <= topEdgeToTriggerMiddle;
 
@@ -1275,9 +1279,15 @@ export class SelectContentState {
 			);
 			const height = clampedTopEdgeToTriggerMiddle + itemMiddleToContentBottom;
 			contentWrapper.style.height = height + "px";
-			contentWrapper.style.top = CONTENT_MARGIN + "px";
 			contentWrapper.style.bottom = "";
-			viewport.scrollTop = viewportTopToItemMiddle - topEdgeToTriggerMiddle;
+			// Scroll the viewport so the selected item aligns with the trigger center.
+			// For items near the end of the list, the viewport may not be able to scroll as far as
+			// needed (scrollTop gets clamped to scrollHeight - clientHeight). In that case, shift
+			// the wrapper upward by the uncovered difference to keep the item on the trigger center.
+			const desiredScrollTop = viewportTopToItemMiddle - topEdgeToTriggerMiddle;
+			viewport.scrollTop = desiredScrollTop;
+			const clampedBy = desiredScrollTop - viewport.scrollTop;
+			contentWrapper.style.top = (CONTENT_MARGIN - clampedBy) + "px";
 		}
 
 		contentWrapper.style.margin = "";
@@ -1298,22 +1308,21 @@ export class SelectContentState {
 	}
 
 	/**
-	 * Lightweight reposition used on page scroll. Computes an unclamped top so the
-	 * content scrolls off-screen when the trigger scrolls out of view, matching the
-	 * natural behavior of a popper-positioned dropdown.
+	 * Lightweight reposition used on page scroll. The trigger has moved (page scrolled) but
+	 * the content wrapper (position: fixed) has not. Shift the wrapper by the delta between
+	 * the trigger center's new position and the selected item's current screen center so the
+	 * two stay aligned without rerunning the full layout algorithm.
 	 */
 	#repositionOnScroll() {
 		const contentWrapper = this.root.contentWrapperNode;
 		const trigger = this.root.triggerNode;
-		const viewport = this.root.viewportNode;
 		const selectedItem = this.root.selectedItemNode;
-		if (!contentWrapper || !trigger || !viewport || !selectedItem) return;
+		if (!contentWrapper || !trigger || !selectedItem) return;
 
-		const triggerRect = trigger.getBoundingClientRect();
-		const viewportTopToItemMiddle =
-			viewport.offsetTop + selectedItem.offsetTop + selectedItem.offsetHeight / 2;
-		const contentTop = triggerRect.top + triggerRect.height / 2 - viewportTopToItemMiddle + viewport.scrollTop;
-		contentWrapper.style.top = contentTop + "px";
+		const currentTop = parseFloat(contentWrapper.style.top) || 0;
+		const triggerCenterY = trigger.getBoundingClientRect().top + trigger.offsetHeight / 2;
+		const itemCenterY = selectedItem.getBoundingClientRect().top + selectedItem.offsetHeight / 2;
+		contentWrapper.style.top = (currentTop + triggerCenterY - itemCenterY) + "px";
 		contentWrapper.style.bottom = "";
 	}
 
