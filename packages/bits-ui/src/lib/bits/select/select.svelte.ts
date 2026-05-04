@@ -33,6 +33,7 @@ import type {
 } from "$lib/internal/types.js";
 import { noop } from "$lib/internal/noop.js";
 import { isIOS } from "$lib/internal/is.js";
+import { isOrContainsTarget } from "$lib/internal/elements.js";
 import { createBitsAttrs } from "$lib/internal/attrs.js";
 import { getFloatingContentCSSVars } from "$lib/internal/floating-svelte/floating-utils.svelte.js";
 import { DataTypeahead } from "$lib/internal/data-typeahead.svelte.js";
@@ -1045,6 +1046,7 @@ export class SelectContentState {
 
 		watch([() => this.isPositioned, () => this.root.highlightedNode], () => {
 			if (!this.isPositioned || !this.root.highlightedNode) return;
+			if (this.useItemAligned) return;
 			this.root.scrollHighlightedNodeIntoView(this.root.highlightedNode);
 		});
 
@@ -1196,8 +1198,11 @@ export class SelectContentState {
 		const itemOffsetMiddle = selectedItem.offsetTop + selectedItemHalfHeight;
 		const contentTopToItemMiddle = contentBorderTopWidth + contentPaddingTop + itemOffsetMiddle;
 		const itemMiddleToContentBottom = fullContentHeight - contentTopToItemMiddle;
+		// selectedItem.offsetTop is relative to the viewport (its offsetParent), so the
+		// distance from the wrapper top to the item middle uses viewport.offsetTop directly.
+		const viewportTopToItemMiddle = viewport.offsetTop + itemOffsetMiddle;
 
-		const willAlignWithoutTopOverflow = contentTopToItemMiddle <= topEdgeToTriggerMiddle;
+		const willAlignWithoutTopOverflow = viewportTopToItemMiddle <= topEdgeToTriggerMiddle;
 
 		if (willAlignWithoutTopOverflow) {
 			const isLastItem =
@@ -1213,7 +1218,7 @@ export class SelectContentState {
 					viewportOffsetBottom +
 					contentBorderBottomWidth
 			);
-			const height = contentTopToItemMiddle + clampedTriggerMiddleToBottomEdge;
+			const height = viewportTopToItemMiddle + clampedTriggerMiddleToBottomEdge;
 			contentWrapper.style.height = height + "px";
 		} else {
 			const isFirstItem = allItems.length > 0 && selectedItem === allItems[0];
@@ -1228,8 +1233,7 @@ export class SelectContentState {
 			);
 			const height = clampedTopEdgeToTriggerMiddle + itemMiddleToContentBottom;
 			contentWrapper.style.height = height + "px";
-			viewport.scrollTop =
-				contentTopToItemMiddle - topEdgeToTriggerMiddle + viewport.offsetTop;
+			viewport.scrollTop = viewportTopToItemMiddle - topEdgeToTriggerMiddle;
 		}
 
 		contentWrapper.style.margin = `${CONTENT_MARGIN}px 0`;
@@ -1258,7 +1262,11 @@ export class SelectContentState {
 	});
 
 	onInteractOutside = (e: PointerEvent) => {
-		if (e.target === this.root.triggerNode || e.target === this.root.inputNode) {
+		const target = e.target as Element | null;
+		if (
+			(this.root.triggerNode && isOrContainsTarget(this.root.triggerNode, target as HTMLElement)) ||
+			(this.root.inputNode && isOrContainsTarget(this.root.inputNode, target as HTMLElement))
+		) {
 			e.preventDefault();
 			return;
 		}
@@ -1405,6 +1413,8 @@ export class SelectItemState {
 		this.onpointermove = this.onpointermove.bind(this);
 	}
 
+	#isPointerDown = false;
+
 	handleSelect() {
 		if (this.opts.disabled.current) return;
 		const isCurrentSelectedValue = this.opts.value.current === this.root.opts.value.current;
@@ -1432,6 +1442,7 @@ export class SelectItemState {
 	onpointerdown(e: BitsPointerEvent) {
 		// prevent focus from leaving the input/select trigger
 		e.preventDefault();
+		this.#isPointerDown = true;
 	}
 
 	/**
@@ -1441,6 +1452,8 @@ export class SelectItemState {
 	 */
 	onpointerup(e: BitsPointerEvent) {
 		if (e.defaultPrevented || !this.opts.ref.current) return;
+		if (!this.#isPointerDown) return;
+		this.#isPointerDown = false;
 		/**
 		 * For one reason or another, when it's a touch pointer and _not_ on IOS,
 		 * we need to listen for the immediate click event to handle the selection,
@@ -1798,6 +1811,7 @@ export class SelectScrollDownButtonState {
 					clearTimeout(this.scrollIntoViewTimer);
 				}
 				this.scrollIntoViewTimer = afterSleep(5, () => {
+					if (this.content.useItemAligned) return;
 					const activeItem = this.root.highlightedNode;
 					if (!activeItem) return;
 					this.root.scrollHighlightedNodeIntoView(activeItem);
