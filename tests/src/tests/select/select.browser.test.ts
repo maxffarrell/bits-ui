@@ -1089,7 +1089,7 @@ describe("select - item-aligned", () => {
 	];
 
 	function setupAligned(props: Partial<SelectItemAlignedTestProps> = {}) {
-		render(SelectItemAlignedTest, { items: alignedItems, ...props });
+		render(SelectItemAlignedTest, { items: alignedItems, ...props } as SelectItemAlignedTestProps);
 		return {
 			trigger: page.getByTestId("trigger"),
 			outside: page.getByTestId("outside"),
@@ -1189,9 +1189,6 @@ describe("select - item-aligned", () => {
 				pointerType: "mouse",
 				clientX: cx,
 				clientY: cy,
-				pageX: cx + window.scrollX,
-				pageY: cy + window.scrollY,
-				capture: false,
 			})
 		);
 
@@ -1220,8 +1217,6 @@ describe("select - item-aligned", () => {
 				button: 0,
 				clientX: cx,
 				clientY: cy,
-				pageX: cx + window.scrollX,
-				pageY: cy + window.scrollY,
 			})
 		);
 		await expectExists(t.getContent());
@@ -1235,8 +1230,6 @@ describe("select - item-aligned", () => {
 				pointerType: "mouse",
 				clientX: cx,
 				clientY: cy + 20,
-				pageX: cx + window.scrollX,
-				pageY: cy + 20 + window.scrollY,
 			})
 		);
 
@@ -1251,8 +1244,6 @@ describe("select - item-aligned", () => {
 				pointerType: "mouse",
 				clientX: cx,
 				clientY: cy + 20,
-				pageX: cx + window.scrollX,
-				pageY: cy + 20 + window.scrollY,
 			})
 		);
 
