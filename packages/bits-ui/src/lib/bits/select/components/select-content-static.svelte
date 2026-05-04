@@ -36,6 +36,11 @@
 	});
 
 	const mergedProps = $derived(mergeProps(restProps, contentState.props));
+
+	function mountWrapper(node: HTMLElement) {
+		contentState.setContentWrapper(node);
+		return { destroy: () => contentState.setContentWrapper(null) };
+	}
 </script>
 
 {#if contentState.useItemAligned}
@@ -54,10 +59,7 @@
 	>
 		{#snippet content({ props: layerProps })}
 			{@const contentProps = mergeProps(restProps, layerProps, contentState.props, { style })}
-			<div
-				ref={(node) => contentState.setContentWrapper(node)}
-				style={{ position: "fixed", display: "flex", flexDirection: "column" }}
-			>
+			<div use:mountWrapper style="position: fixed; display: flex; flex-direction: column;">
 				{#if child}
 					{@render child({ props: contentProps, ...contentState.snippetProps })}
 				{:else}
