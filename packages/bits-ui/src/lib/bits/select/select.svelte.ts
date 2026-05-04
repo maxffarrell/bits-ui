@@ -1194,39 +1194,20 @@ export class SelectContentState {
 		const content = this.root.contentNode;
 		const viewport = this.root.viewportNode;
 		const trigger = this.root.triggerNode;
-		const valueNode = this.root.valueNode;
 		const selectedItem = this.root.selectedItemNode;
 
-		if (!contentWrapper || !content || !viewport || !trigger || !valueNode || !selectedItem) {
+		if (!contentWrapper || !content || !viewport || !trigger || !selectedItem) {
 			return;
 		}
 
 		const win = this.domContext.getWindow();
 		if (!win) return;
 
-		// In Radix, `selectedItemText` is a separate <ItemText> sub-element. Since bits-ui
-		// has no separate ItemText component, we use the item element itself as the proxy.
-		const selectedItemText = selectedItem;
-
 		const triggerRect = trigger.getBoundingClientRect();
-		const contentRect = content.getBoundingClientRect();
-		const valueNodeRect = valueNode.getBoundingClientRect();
-		const itemTextRect = selectedItemText.getBoundingClientRect();
 
 		// -----------------------------------------------------------------------------------------
-		// Horizontal positioning — align item-text left edge with value-node left edge.
+		// Horizontal positioning — match trigger width and left edge exactly.
 		// -----------------------------------------------------------------------------------------
-		const itemTextOffset = itemTextRect.left - contentRect.left;
-		const left = valueNodeRect.left - itemTextOffset;
-		const leftDelta = triggerRect.left - left;
-		const minContentWidth = triggerRect.width + leftDelta;
-		const contentWidth = Math.max(minContentWidth, contentRect.width);
-		const rightEdge = win.innerWidth - CONTENT_MARGIN;
-		const clampedLeft = Math.max(
-			CONTENT_MARGIN,
-			Math.min(left, Math.max(CONTENT_MARGIN, rightEdge - contentWidth))
-		);
-
 		contentWrapper.style.width = triggerRect.width + "px";
 		contentWrapper.style.left = triggerRect.left + "px";
 

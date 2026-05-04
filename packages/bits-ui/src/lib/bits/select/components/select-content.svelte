@@ -63,7 +63,7 @@
 		{#snippet content({ props: layerProps })}
 			{@const contentProps = mergeProps(restProps, layerProps, contentState.props, { style })}
 			<!-- Radix-style two-div structure: fixed wrapper + content div that fills it -->
-			<div use:mountWrapper style="position: fixed; display: flex; flex-direction: column;">
+			<div use:mountWrapper data-select-content-wrapper style="position: fixed; display: flex; flex-direction: column;">
 				{#if child}
 					{@render child({
 						props: contentProps,
