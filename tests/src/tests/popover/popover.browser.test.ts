@@ -7,7 +7,12 @@ import PopoverForceMountTest, {
 	type PopoverForceMountTestProps,
 } from "./popover-force-mount-test.svelte";
 import PopoverSiblingsTest from "./popover-siblings-test.svelte";
-import { expectExists, expectNotExists, observeTransitionAttrs } from "../browser-utils";
+import {
+	expectExists,
+	expectNotExists,
+	observeTransitionAttrs,
+	waitForDismissibleLayer,
+} from "../browser-utils";
 import { page, userEvent } from "@vitest/browser/context";
 import PopoverMultipleTriggersTest from "./popover-multiple-triggers-test.svelte";
 import PopoverOverlayTest from "./popover-overlay-test.svelte";
@@ -40,15 +45,9 @@ async function open(props: PopoverTestProps = {}, openWith: "click" | (string & 
 		await userEvent.keyboard(openWith);
 	}
 	await expectExists(t.getContent());
-	await waitForDismissableReady();
+	await waitForDismissibleLayer(t.getContent());
 	const content = page.getByTestId("content");
 	return { content, ...t };
-}
-
-// The dismissable layer attaches its outside-click listeners asynchronously.
-// Wait before tests that open and immediately interact outside the layer.
-async function waitForDismissableReady() {
-	await new Promise((resolve) => setTimeout(resolve, 25));
 }
 
 function nextFrame() {
@@ -176,6 +175,7 @@ it("should close before content visibly jumps to viewport origin when outside in
 
 	await page.getByTestId("trigger").click();
 	await expectExists(page.getByTestId("content"));
+	await waitForDismissibleLayer(page.getByTestId("content"));
 	await expect.element(page.getByTestId("open-binding")).toHaveTextContent("true");
 
 	const content = page.getByTestId("content").element() as HTMLElement;
@@ -385,9 +385,11 @@ it("should correctly handle focus when closing one popover by clicking another p
 	render(PopoverSiblingsTest);
 	await page.getByTestId("open-1").click();
 	await expectExists(page.getByTestId("content-1"));
+	await waitForDismissibleLayer(page.getByTestId("content-1"));
 	await page.getByTestId("open-2").click();
 	await expectNotExists(page.getByTestId("content-1"));
 	await expectExists(page.getByTestId("content-2"));
+	await waitForDismissibleLayer(page.getByTestId("content-2"));
 	await expect.element(page.getByTestId("close-2")).toHaveFocus();
 	await page.getByTestId("open-3").click();
 	await expectNotExists(page.getByTestId("content-2"));

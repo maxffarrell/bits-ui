@@ -14,7 +14,12 @@ import SelectValueChildTest from "./select-value-child-test.svelte";
 import type { SelectValueChildrenMultiTestProps } from "./select-value-children-multi-test.svelte";
 import SelectValueChildrenMultiTest from "./select-value-children-multi-test.svelte";
 import SelectViewportTest from "./select-viewport-test.svelte";
-import { expectExists, expectNotExists, observeTransitionAttrs } from "../browser-utils";
+import {
+	expectExists,
+	expectNotExists,
+	observeTransitionAttrs,
+	waitForDismissibleLayer,
+} from "../browser-utils";
 import SelectScrollJumpTest from "./select-scroll-jump-test.svelte";
 import SelectItemAlignedTest from "./select-item-aligned-test.svelte";
 import type { SelectItemAlignedTestProps } from "./select-item-aligned-test.svelte";
@@ -173,17 +178,6 @@ function setupValueChildrenMultiple(
 	};
 }
 
-// The dismissable layer attaches its outside-click listeners via setTimeout(1),
-// so a test that opens the menu and immediately clicks outside can race. Wait
-// until the layer has registered itself globally before returning.
-async function waitForDismissableReady() {
-	await vi.waitFor(() => {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const layers = (globalThis as any).bitsDismissableLayers;
-		expect(layers && layers.size > 0).toBe(true);
-	});
-}
-
 async function openSingle(
 	props: Partial<SelectSingleTestProps> = {},
 	openWith: "click" | "type" | (string & {}) = "click",
@@ -200,7 +194,7 @@ async function openSingle(
 		await userEvent.keyboard(openWith);
 	}
 	await expectExists(t.getContent());
-	await waitForDismissableReady();
+	await waitForDismissibleLayer(t.getContent());
 	const content = t.getContent();
 	const group = page.getByTestId("group");
 	const groupHeading = page.getByTestId("group-label");
@@ -227,7 +221,7 @@ async function openMultiple(
 		await userEvent.keyboard(openWith);
 	}
 	await expectExists(t.getContent());
-	await waitForDismissableReady();
+	await waitForDismissibleLayer(t.getContent());
 	const content = t.getContent();
 	return {
 		...t,
@@ -268,6 +262,7 @@ describe("select - single", () => {
 
 		await t.trigger.click();
 		await vi.waitFor(() => expect(observer.history.some((entry) => entry.starting)).toBe(true));
+		await waitForDismissibleLayer(t.getContent());
 
 		await t.outside.click({ force: true });
 		await vi.waitFor(() => expect(observer.history.some((entry) => entry.ending)).toBe(true));
@@ -1126,7 +1121,7 @@ describe("select - item-aligned", () => {
 		await expectNotExists(t.getContent());
 		await t.trigger.click();
 		await expectExists(t.getContent());
-		await waitForDismissableReady();
+		await waitForDismissibleLayer(t.getContent());
 		return t;
 	}
 
