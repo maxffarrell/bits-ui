@@ -18,7 +18,7 @@ import {
 	expectExists,
 	expectNotExists,
 	observeTransitionAttrs,
-	pointerDown,
+	waitForDismissibleLayer,
 } from "../browser-utils";
 import SelectScrollJumpTest from "./select-scroll-jump-test.svelte";
 import { page, userEvent } from "@vitest/browser/context";
@@ -192,6 +192,7 @@ async function openSingle(
 		await userEvent.keyboard(openWith);
 	}
 	await expectExists(t.getContent());
+	await waitForDismissibleLayer(t.getContent());
 	const content = t.getContent();
 	const group = page.getByTestId("group");
 	const groupHeading = page.getByTestId("group-label");
@@ -218,6 +219,7 @@ async function openMultiple(
 		await userEvent.keyboard(openWith);
 	}
 	await expectExists(t.getContent());
+	await waitForDismissibleLayer(t.getContent());
 	const content = t.getContent();
 	return {
 		...t,
@@ -258,6 +260,7 @@ describe("select - single", () => {
 
 		await t.trigger.click();
 		await vi.waitFor(() => expect(observer.history.some((entry) => entry.starting)).toBe(true));
+		await waitForDismissibleLayer(t.getContent());
 
 		await t.outside.click({ force: true });
 		await vi.waitFor(() => expect(observer.history.some((entry) => entry.ending)).toBe(true));
@@ -325,7 +328,6 @@ describe("select - single", () => {
 	it("should close on outside click", async () => {
 		const t = await openSingle();
 
-		await pointerDown(t.outside);
 		await t.outside.click({ force: true });
 		await expectNotExists(t.getContent());
 	});
@@ -789,7 +791,6 @@ describe("select - multiple", () => {
 
 	it("should close on outside click", async () => {
 		const t = await openMultiple();
-		await pointerDown(t.outside);
 		await t.outside.click({ force: true });
 		await expectNotExists(t.getContent());
 	});

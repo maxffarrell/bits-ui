@@ -10,7 +10,7 @@ import ComboboxMultiTest from "./combobox-multi-test.svelte";
 import ComboboxForceMountTest, {
 	type ComboboxForceMountTestProps,
 } from "./combobox-force-mount-test.svelte";
-import { expectExists, expectNotExists, pointerDown } from "../browser-utils";
+import { expectExists, expectNotExists, waitForDismissibleLayer } from "../browser-utils";
 
 const kbd = getTestKbd();
 
@@ -119,6 +119,7 @@ async function openSingle(
 		await returned.user.keyboard(openWith);
 	}
 	await expectExists(page.getByTestId("content"));
+	await waitForDismissibleLayer(page.getByTestId("content"));
 	const content = page.getByTestId("content");
 	const group = page.getByTestId("group");
 	const groupHeading = page.getByTestId("group-label");
@@ -148,6 +149,7 @@ async function openMultiple(
 		await returned.user.keyboard(openWith);
 	}
 	await expectExists(page.getByTestId("content"));
+	await waitForDismissibleLayer(page.getByTestId("content"));
 	const content = page.getByTestId("content");
 	return {
 		...returned,
@@ -219,7 +221,6 @@ describe("combobox - single", () => {
 
 	it("should close on outside click", async () => {
 		const t = await openSingle();
-		await pointerDown(t.outside);
 		await t.outside.click({ force: true });
 		await expectNotExists(t.getContent());
 	});
@@ -577,7 +578,6 @@ describe("combobox - multiple", () => {
 
 	it("should close on outside click", async () => {
 		const t = await openMultiple();
-		await pointerDown(t.outside);
 		await t.outside.click({ force: true });
 		await expectNotExists(t.getContent());
 	});
