@@ -72,12 +72,13 @@ it("should stay open when hovering content", async () => {
 
 it("should open on focus and close on blur", async () => {
 	const t = await setup();
+	await page.getByTestId("outside").hover();
 	await expectNotExists(page.getByTestId("content"));
 
 	(t.trigger.element() as HTMLElement).focus();
 	await expectExists(page.getByTestId("content"));
 
-	(t.trigger.element() as HTMLElement).blur();
+	(page.getByTestId("binding").element() as HTMLElement).focus();
 	await expectNotExists(page.getByTestId("content"));
 });
 
