@@ -407,7 +407,7 @@ it("should preserve PM when typing the hour and then the minutes in 12h mode", a
 	});
 
 	await expect.element(t.getDayPeriod()).toHaveTextContent("PM");
-	await expect.element(t.value).toHaveTextContent("2026-03-11T21:30");
+	await expect.element(t.value).toHaveTextContent("2026-03-11T21:30:00");
 
 	await t.getHour().click();
 	await userEvent.keyboard(`{9}`);
@@ -415,7 +415,7 @@ it("should preserve PM when typing the hour and then the minutes in 12h mode", a
 
 	await expect.element(t.getHour()).toHaveTextContent("09");
 	await expect.element(t.getDayPeriod()).toHaveTextContent("PM");
-	await expect.element(t.value).toHaveTextContent("2026-03-11T21:30");
+	await expect.element(t.value).toHaveTextContent("2026-03-11T21:30:00");
 });
 
 it("should preserve AM when typing 12 for the hour and then the minutes in 12h mode", async () => {
@@ -424,7 +424,7 @@ it("should preserve AM when typing 12 for the hour and then the minutes in 12h m
 	});
 
 	await expect.element(t.getDayPeriod()).toHaveTextContent("AM");
-	await expect.element(t.value).toHaveTextContent("2026-03-11T00:30");
+	await expect.element(t.value).toHaveTextContent("2026-03-11T00:30:00");
 
 	await t.getHour().click();
 	await userEvent.keyboard(`{1}{2}`);
@@ -432,7 +432,7 @@ it("should preserve AM when typing 12 for the hour and then the minutes in 12h m
 
 	await expect.element(t.getHour()).toHaveTextContent("12");
 	await expect.element(t.getDayPeriod()).toHaveTextContent("AM");
-	await expect.element(t.value).toHaveTextContent("2026-03-11T00:30");
+	await expect.element(t.value).toHaveTextContent("2026-03-11T00:30:00");
 });
 
 it("should go all the way through the segment with spamming 3", async () => {
