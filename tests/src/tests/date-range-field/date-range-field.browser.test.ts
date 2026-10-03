@@ -284,7 +284,7 @@ it("should allow valid days in the end month with a day-first locale", async () 
 
 it("should update segment positioning when the `locale` changes", async () => {
 	const rangeValue = { start: new CalendarDate(2022, 1, 31), end: new CalendarDate(2022, 3, 15) };
-	const t = setup({ value: rangeValue, locale: "en-US" });
+	const t = await setup({ value: rangeValue, locale: "en-US" });
 	const input = (type: "start" | "end") =>
 		t.container.querySelector(`[data-testid="${type}-input"]`)!;
 

@@ -676,7 +676,7 @@ it("should default the first day of the week to the locale's first day of the we
 
 it("should update segment positioning when the `locale` changes", async () => {
 	const rangeValue = { start: new CalendarDate(2022, 1, 31), end: new CalendarDate(2022, 3, 15) };
-	const t = render(DateRangePickerTest, { value: rangeValue, locale: "en-US" });
+	const t = await render(DateRangePickerTest, { value: rangeValue, locale: "en-US" });
 	const input = (type: "start" | "end") =>
 		t.container.querySelector(`[data-testid="${type}-input"]`)!;
 
