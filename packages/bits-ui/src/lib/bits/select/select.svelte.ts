@@ -1,3 +1,4 @@
+import { SvelteMap } from "svelte/reactivity";
 import { Context, Previous, watch } from "runed";
 import {
 	afterSleep,
@@ -113,6 +114,11 @@ abstract class SelectBaseRootState {
 	triggerPointerDownPos = $state<{ x: number; y: number } | null>(null);
 	valueNode = $state<HTMLElement | null>(null);
 	valueId = $state("");
+	/**
+	 * Labels for selected values, populated when items are toggled or resolved from
+	 * mounted item nodes. Used so `<Select.Value>` keeps labels after the menu closes.
+	 */
+	readonly selectedLabelsByValue = new SvelteMap<string, string>();
 	highlightedNode = $state<HTMLElement | null>(null);
 	readonly highlightedValue = $derived.by(() => {
 		if (!this.highlightedNode) return null;
@@ -216,20 +222,32 @@ abstract class SelectBaseRootState {
 	}
 
 	/**
-	 * Resolves the display label for a value: `items` entry when present, otherwise the
-	 * mounted item's `data-label` or its text content.
+	 * Resolves the display label for a value: a non-empty `items` entry, otherwise the
+	 * label cached from the selected item. Never reads the DOM, so it stays reactive and
+	 * works the same whether items are mounted, unmounted, or force-mounted.
 	 */
 	getLabelForValue(value: string): string {
 		if (value === "") return "";
 		const fromItems = this.opts.items.current.find((item) => item.value === value)?.label;
-		if (fromItems !== undefined) return fromItems;
-		const node = this.getNodeByValue(value);
-		if (node) {
-			const dataLabel = node.getAttribute("data-label");
-			if (dataLabel !== null && dataLabel !== "") return dataLabel;
-			return node.textContent?.trim() ?? value;
+		if (fromItems?.trim()) return fromItems;
+		return this.selectedLabelsByValue.get(value) ?? value;
+	}
+
+	/** The item's `label`, falling back to its text content when the label is empty. */
+	resolveItemLabel(value: string, label: string | null | undefined, node: HTMLElement | null) {
+		if (label?.trim()) return label;
+		return node?.textContent?.trim() || value;
+	}
+
+	setSelectedLabel(value: string, label: string) {
+		if (value === "" || label === value) this.selectedLabelsByValue.delete(value);
+		else this.selectedLabelsByValue.set(value, label);
+	}
+
+	pruneSelectedLabels(keptValues: string[]) {
+		for (const value of this.selectedLabelsByValue.keys()) {
+			if (!keptValues.includes(value)) this.selectedLabelsByValue.delete(value);
 		}
-		return value;
 	}
 
 	setOpen(open: boolean) {
@@ -304,6 +322,13 @@ export class SelectSingleRootState extends SelectBaseRootState {
 				this.setInitialHighlightedNode();
 			}
 		);
+
+		watch(
+			() => this.opts.value.current,
+			(value) => {
+				this.pruneSelectedLabels(value === "" ? [] : [value]);
+			}
+		);
 	}
 
 	includesItem(itemValue: string) {
@@ -314,6 +339,7 @@ export class SelectSingleRootState extends SelectBaseRootState {
 		const newValue = this.includesItem(itemValue) ? "" : itemValue;
 		this.opts.value.current = newValue;
 		if (newValue !== "") {
+			this.setSelectedLabel(itemValue, itemLabel);
 			this.opts.inputValue.current = itemLabel;
 		}
 	}
@@ -372,6 +398,13 @@ class SelectMultipleRootState extends SelectBaseRootState {
 				this.setInitialHighlightedNode();
 			}
 		);
+
+		watch(
+			() => this.opts.value.current,
+			(value) => {
+				this.pruneSelectedLabels(value);
+			}
+		);
 	}
 
 	includesItem(itemValue: string) {
@@ -383,6 +416,7 @@ class SelectMultipleRootState extends SelectBaseRootState {
 			this.opts.value.current = this.opts.value.current.filter((v) => v !== itemValue);
 		} else {
 			this.opts.value.current = [...this.opts.value.current, itemValue];
+			this.setSelectedLabel(itemValue, itemLabel);
 		}
 		this.opts.inputValue.current = itemLabel;
 	}
@@ -477,6 +511,7 @@ export class SelectValueState {
 				throw new Error(`Expected a string passed to \`setValue\` got ${typeof value}.`);
 			return;
 		}
+		// stale cached labels are pruned by the root's value watcher
 		this.root.opts.value.current = value;
 	}
 
@@ -504,9 +539,7 @@ export class SelectValueState {
 			selection: {
 				type: "single" as const,
 				selected:
-					value !== ""
-						? { value, label: value === "" ? "" : this.root.getLabelForValue(value) }
-						: undefined,
+					value !== "" ? { value, label: this.root.getLabelForValue(value) } : undefined,
 				setValue: this.setValue,
 			},
 			placeholder: this.opts.placeholder.current ?? null,
@@ -614,7 +647,11 @@ export class SelectInputState {
 			) {
 				this.root.toggleItem(
 					this.root.highlightedValue,
-					this.root.highlightedLabel ?? undefined
+					this.root.resolveItemLabel(
+						this.root.highlightedValue,
+						this.root.highlightedLabel,
+						this.root.highlightedNode
+					)
 				);
 			}
 			if (!this.root.isMulti && !isCurrentSelectedValue) {
@@ -845,7 +882,11 @@ export class SelectTriggerState {
 		if (this.root.highlightedValue !== null) {
 			this.root.toggleItem(
 				this.root.highlightedValue,
-				this.root.highlightedLabel ?? undefined
+				this.root.resolveItemLabel(
+					this.root.highlightedValue,
+					this.root.highlightedLabel,
+					this.root.highlightedNode
+				)
 			);
 		}
 
@@ -1570,9 +1611,32 @@ export class SelectItemState {
 		});
 
 		this.onclick = this.onclick.bind(this);
+
+		// keep the cached label in sync while this item is selected and mounted
+		watch(
+			[
+				() => this.isSelected,
+				() => this.mounted,
+				() => this.opts.value.current,
+				() => this.opts.label.current,
+			],
+			([selected, mounted, value]) => {
+				if (!selected || !mounted) return;
+				this.root.setSelectedLabel(value, this.#resolveLabel());
+			}
+		);
+
 		this.onpointerdown = this.onpointerdown.bind(this);
 		this.onpointerup = this.onpointerup.bind(this);
 		this.onpointermove = this.onpointermove.bind(this);
+	}
+
+	#resolveLabel() {
+		return this.root.resolveItemLabel(
+			this.opts.value.current,
+			this.opts.label.current,
+			this.opts.ref.current
+		);
 	}
 
 	handleSelect() {
@@ -1587,7 +1651,7 @@ export class SelectItemState {
 		}
 
 		// otherwise, toggle the item and if we're not in a multi select, close the menu
-		this.root.toggleItem(this.opts.value.current, this.opts.label.current);
+		this.root.toggleItem(this.opts.value.current, this.#resolveLabel());
 
 		if (!this.root.isMulti && !isCurrentSelectedValue) {
 			this.root.handleClose();
