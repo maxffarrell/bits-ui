@@ -351,6 +351,10 @@ The Combobox component follows the [WAI-ARIA descendant pattern](https://www.w3.
 
 Use the `autoHighlight` prop on `Combobox.Root` to automatically highlight the first matching item after the user filters the list.
 
+`autoHighlight` defaults to `false`. With `true`, typing highlights the first enabled result, including results that arrive asynchronously. Opening with the trigger does not automatically highlight the first item. An existing selection is still highlighted on open, and arrow keys can highlight items regardless of this prop. Clearing the query restores the selected item's highlight when a selection exists.
+
+Automatic highlighting after typing previously happened without an explicit prop. To retain that behavior, add `autoHighlight={true}`. To highlight the first item on open without a selection, open using the arrow keys.
+
 ### Styling Highlighted Items
 
 You can use the `data-highlighted` attribute on the `Combobox.Item` component to style the item differently when it is highlighted.

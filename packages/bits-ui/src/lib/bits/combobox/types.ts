@@ -13,6 +13,8 @@ export type ComboboxBaseRootPropsWithoutHTML = Omit<
 	/**
 	 * Whether the first matching item should be highlighted automatically as the
 	 * user filters the list.
+	 * Results arriving asynchronously are included. Does not highlight the first
+	 * item on trigger open; selected items and keyboard navigation still highlight.
 	 *
 	 * @default false
 	 */
